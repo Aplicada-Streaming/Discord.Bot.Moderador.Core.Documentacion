@@ -1,0 +1,1 @@
+# Discord.Bot.Moderador.Core.Documentos
