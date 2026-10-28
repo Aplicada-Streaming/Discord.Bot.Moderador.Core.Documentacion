@@ -1,0 +1,114 @@
+# Manifiesto de documentación (Marco §12.2) — máquina-legible.
+# Un agente calcula el gap documental (requerido − existente − vencido) leyendo solo este archivo
+# más el frontmatter de cada .md. Estado inicial: draft (generado por ingeniería inversa).
+# Generado por /IA.Prompting.Templates/Tool-Prompts/Documentar-Fuentes-Software.md el 2026-07-15.
+
+solution:
+  name: administrador-bots-moderador-discord
+  display_name: Administrador de Bots Moderador para Discord
+  repo: Discord.Bot.Moderador.Core
+  regulated: false            # No hay perfil de dominio regulado activo (A.17). Ver nota_regulacion.
+  nota_regulacion: >-
+    Trata identificadores y copias de mensajes de Discord como evidencia. Existe una decisión de
+    cumplimiento respecto de la Ley argentina 25.326 (ADR-06), documentada como consideración de
+    seguridad/retención, no como perfil regulado formal.
+  version_scheme: nerdbank-gitversioning   # version.json = 1.0, sin tags aún
+  status: v1-funcionalmente-completo
+  source_of_truth: ../Discord.Bot.Moderador.Core        # código = fuente de verdad
+  secondary_source: ../Discord.Bot.Moderador.Core/SDD2.2D/docs   # SDD 2.2 (citar, no copiar)
+
+pieces:
+  - id: discordmoderadorbot-servicio
+    type: web-monolith          # combina web-portal + service/worker + database (Marco §7, §5.1)
+    combines: [web-portal, service, worker, database]
+    path: src/DiscordModeradorBot.Servicio
+    docs_root: docs/pieces/discordmoderadorbot-servicio/
+    tech: [dotnet-10, blazor-server, mudblazor, discord-net, ef-core, sqlite]
+    criticality: high
+    deployable: true
+    required_docs: [readme, architecture-local, configuration, snippets, changelog]
+    modules:
+      - { name: Dominio,        path: src/DiscordModeradorBot.Servicio/Dominio,        role: nucleo-puro }
+      - { name: Aplicacion,     path: src/DiscordModeradorBot.Servicio/Aplicacion,     role: orquestacion, profile: service }
+      - { name: Infraestructura,path: src/DiscordModeradorBot.Servicio/Infraestructura,role: adaptadores,  profile: worker+database }
+      - { name: Components,     path: src/DiscordModeradorBot.Servicio/Components,     role: panel,        profile: web-portal }
+  - id: servicio-tests
+    type: support-tests
+    path: tests/DiscordModeradorBot.Servicio.Tests
+    tech: [xunit, fluentassertions, nsubstitute]
+    deployable: false
+    required_docs: []           # cubierto en la doc de la pieza (sección pruebas) y en la ia-db
+  - id: servicio-e2e
+    type: support-tests
+    path: tests/DiscordModeradorBot.Servicio.E2E
+    tech: [playwright]
+    deployable: false
+    required_docs: []
+  - id: servicio-benchmarks
+    type: support-perf
+    path: perf/DiscordModeradorBot.Servicio.Benchmarks
+    tech: [benchmarkdotnet]
+    deployable: false
+    required_docs: []
+
+# Documentos de nivel solución (Marco §5.2). path relativo a discord-moderador-docs/.
+solution_docs:
+  overview:
+    - { id: OVERVIEW-VISION-001,  path: docs/00-overview/vision.md,        status: draft }
+    - { id: OVERVIEW-SYSMAP-001,  path: docs/00-overview/system-map.md,     status: draft }
+  architecture:
+    - { id: ARCH-CTX-001,   path: docs/01-architecture/01-context.md,        status: draft }
+    - { id: ARCH-CNT-001,   path: docs/01-architecture/02-containers.md,     status: draft }
+    - { id: ARCH-CMP-001,   path: docs/01-architecture/03-components.md,     status: draft }
+    - { id: ARCH-RTV-001,   path: docs/01-architecture/04-runtime-views.md,  status: draft }
+    - { id: ARCH-DEP-001,   path: docs/01-architecture/05-deployment.md,     status: draft }
+    - { id: ARCH-XCUT-001,  path: docs/01-architecture/06-crosscutting.md,   status: draft }
+  requirements:
+    - { id: REQ-INDEX-001,  path: docs/02-requirements/README.md,            status: draft, note: "resumen; fuente autoritativa = SDD 2.2" }
+  data:
+    - { id: DATA-DICT-001,  path: docs/03-data/data-dictionary.md,           status: draft }
+    - { id: DATA-ER-001,    path: docs/03-data/er-diagrams/modelo.dbml,      status: draft }
+    - { id: DATA-ACC-001,   path: docs/03-data/access-policies.md,           status: draft }
+    - { id: DATA-TDM-001,   path: docs/03-data/test-data-matrix.md,          status: draft }
+  decisions:
+    - { id: DEC-INDEX-001,  path: docs/04-decisions/README.md,               status: draft, note: "catálogo; ADR fuente = SDD 2.2" }
+  apis:
+    - { id: API-CAT-001,    path: docs/05-apis/catalog.md,                   status: draft }
+  security:
+    - { id: SEC-THREAT-001, path: docs/06-security-compliance/threat-model.md, status: draft }
+    - { id: SEC-DATA-001,   path: docs/06-security-compliance/data-protection.md, status: draft }
+  operations:
+    - { id: OPS-INDEX-001,  path: docs/07-operations/README.md,              status: draft }
+  onboarding:
+    - { id: ONB-SETUP-001,  path: docs/08-onboarding/developer-setup.md,     status: draft }
+  agents:
+    - { id: AGENTS-POLICY-001, path: docs/09-agents/agent-policy.md,         status: draft }
+  glossary:
+    - { id: GLOSSARY-000,   path: GLOSSARY.md,                               status: draft }
+
+# Vocabulario de tipos de documento con su vigencia máxima (para el cálculo de "vencido").
+doc_types:
+  data-dictionary:  { path_pattern: "docs/03-data/data-dictionary.md",     max_age_days: 120 }
+  er-model:         { path_pattern: "docs/03-data/er-diagrams/*.dbml",      max_age_days: 120 }
+  test-data-matrix: { path_pattern: "docs/03-data/test-data-matrix.md",     max_age_days: 120 }
+  architecture:     { path_pattern: "docs/01-architecture/*.md",            max_age_days: 180 }
+  adr-catalog:      { path_pattern: "docs/04-decisions/README.md",          max_age_days: 365 }
+  api-catalog:      { path_pattern: "docs/05-apis/catalog.md",              max_age_days: 180 }
+  runbook:          { path_pattern: "docs/07-operations/*.md",              max_age_days: 180 }
+
+# Piezas del Marco §5.2 declaradas como NO aplicables a esta solución (omisión explícita, arc42):
+omitido_declarado:
+  - path: docs/02-requirements/functional (SRS por módulo)
+    razon: >-
+      La especificación funcional autoritativa ya existe en la SDD 2.2 (16 casos de uso, 16 reglas de
+      negocio). Este set la referencia por ID en docs/02-requirements/README.md en lugar de duplicarla.
+  - path: docs/05-apis/openapi.yaml
+    razon: >-
+      La pieza no expone una REST API pública. Solo tiene endpoints internos minimal-API de
+      autenticación del panel (mismo origen), catalogados en docs/05-apis/catalog.md sin contrato OpenAPI.
+  - path: docs/01-architecture (03-deployment como diagrama binario)
+    razon: Los diagramas se expresan como código Mermaid; no se generan imágenes binarias.
+  - path: docs/06-security-compliance/regulatory-mapping.md
+    razon: solution.regulated = false; ver nota_regulacion y docs/06-security-compliance/data-protection.md.
+
+agent_policy: docs/09-agents/agent-policy.md

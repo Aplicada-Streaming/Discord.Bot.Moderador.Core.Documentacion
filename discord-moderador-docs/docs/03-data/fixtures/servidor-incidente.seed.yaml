@@ -1,0 +1,61 @@
+# doc_id: DATA-TDM-001 (fixture) | origin: reverse-engineered, confidence: alta, generado 2026-07-15
+# Fixture sintético PII-safe. Seed fijo: 20260715. NO contiene datos reales.
+# Snowflakes = números ficticios de 17-19 dígitos; usuarios/canales = seudónimos.
+# Escenario: un Servidor registrado con un Incidente EJECUTADO (baneo con borrado retroactivo),
+#   su evidencia (MensajeAccionado + CanalAfectado) y una reversión por el administrador (CU-07).
+# Referencialmente consistente con el esquema EF (data-dictionary.md). Los `id` son sintéticos y
+# sirven para ligar FK dentro del fixture; snowflakes ligan las FK lógicas por texto.
+seed: 20260715
+
+Administrador:
+  - id: 1
+    IdentificadorCuenta: "admin-moderador-demo"
+    ResguardoPassword: "$pbkdf2-sha256$i=100000$c2FsdF9kZW1vX3NpbnRldGljbw$FICTICIO_HASH_PHC_NO_REAL"
+    CreadoEn: "2026-06-01T09:00:00Z"
+
+Servidor:
+  - id: 1
+    SnowflakeServidor: "985231470025518844"
+    TokenCifrado: "enc:aes-gcm:FICTICIO_TOKEN_CIFRADO_NO_REAL_00"   # cifrado en reposo (RN-14); demo
+    EstadoConexion: "conectado"
+    EstadoActivacion: "activo"
+    NombreDescriptivo: "Comunidad Demo Moderacion"
+    CreadoEn: "2026-06-02T14:30:00Z"
+    SnowflakeCanalSalida: "985231470099887711"
+    PropositoCanalSalida: "reporte-de-incidentes"
+
+Incidente:
+  - id: 1
+    ServidorId: "985231470025518844"          # FK lógica -> Servidor.SnowflakeServidor
+    UsuarioId: "774501228833441100"            # snowflake ficticio del usuario accionado
+    NombrePolitica: "spam-enlaces-sospechosos"
+    Modo: "ejecucion"
+    Accion: "BaneoConBorradoRetroactivo"
+    Resultado: "Ejecutada"
+    Instante: "2026-07-10T18:22:05Z"
+    ReversionAutorId: 1                          # FK lógica -> Administrador.id (revertido, CU-07)
+    ReversionFecha: "2026-07-11T10:05:40Z"
+
+MensajeAccionado:
+  - id: 1
+    IncidenteId: 1                              # FK (cascada) -> Incidente.id
+    SnowflakeMensaje: "990012334455667788"
+    SnowflakeCanal: "985231470033445566"
+    ContenidoCopiado: "unete-ahora http://enlace-ficticio.example/promo gratis gratis gratis"
+    NombreCanal: "#general"
+    NombreUsuario: "usuario_mod_4471"
+  - id: 2
+    IncidenteId: 1
+    SnowflakeMensaje: "990012334455667799"
+    SnowflakeCanal: "985231470044556677"
+    ContenidoCopiado: "http://enlace-ficticio.example/promo mira esto rapido"
+    NombreCanal: "#anuncios"
+    NombreUsuario: "usuario_mod_4471"
+
+CanalAfectado:
+  - id: 1
+    IncidenteId: 1                              # FK (cascada) -> Incidente.id
+    SnowflakeCanal: "985231470033445566"
+  - id: 2
+    IncidenteId: 1
+    SnowflakeCanal: "985231470044556677"
