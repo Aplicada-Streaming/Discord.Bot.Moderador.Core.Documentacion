@@ -1,0 +1,212 @@
+// doc_id: DATA-ER-001 | doc_type: er-model
+// origin: reverse-engineered, confidence: alta, generado 2026-07-15
+// Fuente de verdad: código EF Core de
+//   Discord.Bot.Moderador.Core/src/DiscordModeradorBot.Servicio/Infraestructura/Persistencia/
+//   (ContextoPersistencia.OnModelCreating + Entidades/*.cs). NO se accedió a una base viva.
+// Gap: esquema documentado desde el mapeo EF, sin acceso a datos.
+// Notas de fidelidad respecto al código (fuente de verdad):
+//   - Snowflakes se persisten como TEXTO (RN-08, RC-02).
+//   - DateTimeOffset se persiste como ticks UTC (bigint) vía ValueConverter (ADR-02); aquí bigint.
+//   - Las únicas FK forzadas por la BD (cascada) son las de evidencia y configuración por Id.
+//   - Las relaciones por snowflake (texto) y ReversionAutorId/ReglaContenidoId/GrupoDeReglasId
+//     son FK LÓGICAS: el código NO configura HasOne/HasForeignKey para ellas, así que la BD no
+//     las fuerza. Se modelan abajo como refs para el diagrama, agrupadas y comentadas.
+//   - El código NO emite restricciones CHECK: los enums se guardan como texto libre; su dominio
+//     lo valida el Dominio, no la BD.
+//   - No existe tabla física CanalDeSalida: el canal de salida está desnormalizado en Servidor
+//     (SnowflakeCanalSalida, PropositoCanalSalida). ParametrosServidor sí es tabla física.
+
+Project discord_moderador {
+  database_type: 'SQLite'
+  Note: '''
+  Esquema de persistencia embebida (SQLite, WAL, ADR-02) del bot moderador de Discord.
+  13 tablas. Ingeniería inversa desde EF Core; sin acceso a datos. Ver data-dictionary.md.
+  '''
+}
+
+Table Servidor {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'Snowflake del servidor, TEXTO (RN-08, RC-02)']
+  TokenCifrado text [not null, note: 'SENSIBLE: token de bot cifrado AES en reposo (RN-14, ADR-07)']
+  EstadoConexion text [not null, default: 'desconectado', note: 'enum: desconectado|conectado']
+  EstadoActivacion text [not null, default: 'inactivo', note: 'enum: inactivo|activo (RC-08, RN-16)']
+  NombreDescriptivo text [null]
+  CreadoEn bigint [not null, note: 'ticks UTC (ADR-02)']
+  SnowflakeCanalSalida text [null, note: 'Canal de salida desnormalizado (CU-05)']
+  PropositoCanalSalida text [null]
+  indexes {
+    SnowflakeServidor [unique, name: 'ux_servidor_snowflake']
+  }
+  Note: 'Servidor moderado con su credencial cifrada y canal de salida (modelo-datos-logico §2.2, §2.3).'
+}
+
+Table Incidente {
+  Id integer [pk, increment]
+  ServidorId text [not null, note: 'Snowflake del servidor, TEXTO (FK lógica)']
+  UsuarioId text [not null, note: 'Snowflake del usuario accionado, TEXTO (dato personal)']
+  NombrePolitica text [not null, note: 'Nombre lógico de la política/evento que disparó']
+  Modo text [not null, note: 'enum: simulacion|ejecucion (RC-10, RN-09)']
+  Accion text [not null, note: 'Acción representativa registrada']
+  Resultado text [not null, note: 'enum: NoAccionable|Simulada|Ejecutada|Fallida (RN-01)']
+  Instante bigint [not null, note: 'ticks UTC (ADR-02)']
+  ReversionAutorId integer [null, note: 'FK lógica a Administrador; null si no hubo reversión (CU-07)']
+  ReversionFecha bigint [null, note: 'ticks UTC del desbaneo; null si no hubo reversión']
+  indexes {
+    (ServidorId, Instante) [name: 'ix_incidente_servidor_fecha']
+  }
+  Note: 'Registro de una intervención de moderación (modelo-datos-logico §2.11, RN-11).'
+}
+
+Table MensajeAccionado {
+  Id integer [pk, increment]
+  IncidenteId integer [not null]
+  SnowflakeMensaje text [not null]
+  SnowflakeCanal text [not null]
+  ContenidoCopiado text [not null, note: 'PII: copia del texto del mensaje del usuario, evidencia (RN-11)']
+  NombreCanal text [not null, default: '', note: 'PII: nombre legible del canal (CU-06)']
+  NombreUsuario text [not null, default: '', note: 'PII: nombre legible del autor (CU-06)']
+  indexes {
+    IncidenteId [name: 'ix_mensaje_accionado_incidente']
+  }
+  Note: 'Copia de un mensaje involucrado, tomada antes de la remoción (modelo-datos-logico §2.12, RN-11).'
+}
+
+Table CanalAfectado {
+  Id integer [pk, increment]
+  IncidenteId integer [not null]
+  SnowflakeCanal text [not null]
+  indexes {
+    IncidenteId [name: 'ix_canal_afectado_incidente']
+  }
+  Note: 'Canal en el que el incidente tuvo efecto (modelo-datos-logico §2.13, RN-11).'
+}
+
+Table Regla {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'FK lógica por snowflake (RN-08)']
+  Nombre text [not null]
+  TipoCriterio text [not null, note: 'enum: ExpresionRegular|PalabrasClave (RC-09); R3 solo ExpresionRegular']
+  Criterio text [not null, note: 'Criterio serializado ya validado (RN-03)']
+  SensibleAMayusculas boolean [not null]
+  NombrePolitica text [not null, note: 'Vínculo a la política por nombre lógico (R3, walking skeleton)']
+  indexes {
+    SnowflakeServidor [name: 'ix_regla_servidor']
+  }
+  Note: 'Regla de contenido (modelo-datos-logico §2.5, CU-04, R3). Tabla física "Regla".'
+}
+
+Table Administrador {
+  Id integer [pk, increment]
+  IdentificadorCuenta text [not null]
+  ResguardoPassword text [not null, note: 'SENSIBLE: hash PHC (PBKDF2), nunca en claro (RN-13, ADR-03)']
+  CreadoEn bigint [not null, note: 'ticks UTC (ADR-02)']
+  indexes {
+    IdentificadorCuenta [unique, name: 'ux_administrador_cuenta']
+  }
+  Note: 'Cuenta única del administrador (RC-06). La unicidad de fila la resguarda el alta del servicio.'
+}
+
+Table Exencion {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'FK lógica por snowflake (RN-08)']
+  TipoSujeto text [not null, note: 'enum: rol|usuario|canal (ck_exencion_tipo)']
+  SnowflakeSujeto text [not null]
+  indexes {
+    SnowflakeServidor [name: 'ix_exencion_servidor']
+    (SnowflakeServidor, TipoSujeto, SnowflakeSujeto) [unique, name: 'ux_exencion_sujeto']
+  }
+  Note: 'Sujeto de confianza excluido de la moderación (modelo-datos-logico §2.4, CU-15, RN-07).'
+}
+
+Table GrupoDeReglas {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'FK lógica por snowflake (RN-08)']
+  Nombre text [not null]
+  ModoCoincidencia text [not null, note: 'enum: todas|alguna|almenosn (RN-15)']
+  MinimoCoincidencias integer [null, note: 'N mínimo; solo en modo almenosn (RN-15)']
+  indexes {
+    SnowflakeServidor [name: 'ix_grupo_servidor']
+  }
+  Note: 'Grupo de reglas con su modo de coincidencia (RN-15, RC-04). ≥1 regla lo garantiza el Dominio.'
+}
+
+Table GrupoRegla {
+  Id integer [pk, increment]
+  GrupoDeReglasId integer [not null]
+  ClaseRegla text [not null, note: 'enum: contenido|conducta']
+  ReglaContenidoId integer [null, note: 'FK lógica a Regla si clase=contenido']
+  ClaveReglaConducta text [null, note: 'Clave lógica del catálogo si clase=conducta (p. ej. rafaga-distribuida)']
+  indexes {
+    GrupoDeReglasId [name: 'ix_gruporegla_grupo']
+  }
+  Note: 'Relación M:M grupo-regla (RC-03).'
+}
+
+Table Evento {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'FK lógica por snowflake (RN-08)']
+  Nombre text [not null]
+  Prioridad integer [not null, note: 'Menor valor = mayor prioridad (RN-04)']
+  Continuar boolean [not null]
+  Modo text [not null, default: 'simulacion', note: 'enum: simulacion|ejecucion (RN-09)']
+  ModoCombinacionGrupos text [not null, default: 'todos', note: 'enum: todos|alguno (RN-15)']
+  indexes {
+    (SnowflakeServidor, Prioridad) [name: 'ix_evento_servidor_prioridad']
+  }
+  Note: 'Evento/política de moderación (R7, modelo-datos-logico §2.8; CU-11, RN-04, RN-09).'
+}
+
+Table EventoGrupo {
+  Id integer [pk, increment]
+  EventoId integer [not null]
+  GrupoDeReglasId integer [not null, note: 'FK lógica a GrupoDeReglas']
+  indexes {
+    EventoId [name: 'ix_eventogrupo_evento']
+  }
+  Note: 'Relación M:M evento-grupo (RC-03); segundo nivel del anidamiento booleano (RN-15).'
+}
+
+Table Accion {
+  Id integer [pk, increment]
+  EventoId integer [not null]
+  Tipo text [not null, note: 'enum: Reportar|Banear|BaneoConBorradoRetroactivo|Desbanear|Timeout|Expulsar|AsignarRol|QuitarRol|ReportarACanalPrivado']
+  OrdenEjecucion integer [not null, note: 'Orden dentro del evento (RN-05, RC-05)']
+  VentanaBorradoDias integer [null, note: '0-7 días para baneo (RC-11, RN-02); null si no aplica']
+  DuracionTimeoutMinutos integer [null, note: 'Duración del timeout; null si no aplica (R6)']
+  RolObjetivo text [null, note: 'Snowflake del rol objetivo para asignar/quitar rol; null si no aplica']
+  indexes {
+    (EventoId, OrdenEjecucion) [name: 'ix_accion_evento_orden']
+  }
+  Note: 'Acción de un evento con orden y parámetros por tipo (modelo-datos-logico §2.10, RN-05).'
+}
+
+Table ParametrosServidor {
+  Id integer [pk, increment]
+  SnowflakeServidor text [not null, note: 'FK lógica por snowflake (RN-08)']
+  UmbralCanalesDistintos integer [null, note: 'null = usar default del descriptor (CU-01, RN-10)']
+  VentanaDeteccionSegundos real [null, note: 'null = usar default del descriptor (CU-01, RN-10)']
+  VentanaAntirreboteSegundos real [null, note: 'null = usar default del descriptor (CU-16, RN-06)']
+  indexes {
+    SnowflakeServidor [unique, name: 'ux_parametros_servidor']
+  }
+  Note: 'Parámetros de moderación por servidor; una fila por servidor (CU-11, RN-10).'
+}
+
+// ---- FK forzadas por la BD: cascada ON DELETE (configuradas en OnModelCreating) ----
+Ref: MensajeAccionado.IncidenteId > Incidente.Id [delete: cascade]
+Ref: CanalAfectado.IncidenteId > Incidente.Id [delete: cascade]
+Ref: GrupoRegla.GrupoDeReglasId > GrupoDeReglas.Id [delete: cascade]
+Ref: EventoGrupo.EventoId > Evento.Id [delete: cascade]
+Ref: Accion.EventoId > Evento.Id [delete: cascade]
+
+// ---- FK LÓGICAS (NO forzadas por la BD; el código no configura HasOne/HasForeignKey) ----
+// Se modelan para el diagrama; en la BD no hay restricción referencial que las respalde.
+Ref: Incidente.ServidorId > Servidor.SnowflakeServidor
+Ref: Regla.SnowflakeServidor > Servidor.SnowflakeServidor
+Ref: Exencion.SnowflakeServidor > Servidor.SnowflakeServidor
+Ref: GrupoDeReglas.SnowflakeServidor > Servidor.SnowflakeServidor
+Ref: Evento.SnowflakeServidor > Servidor.SnowflakeServidor
+Ref: ParametrosServidor.SnowflakeServidor > Servidor.SnowflakeServidor
+Ref: Incidente.ReversionAutorId > Administrador.Id
+Ref: GrupoRegla.ReglaContenidoId > Regla.Id
+Ref: EventoGrupo.GrupoDeReglasId > GrupoDeReglas.Id

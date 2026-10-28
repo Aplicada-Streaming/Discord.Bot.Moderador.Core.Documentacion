@@ -1,0 +1,86 @@
+# doc_id: DATA-TDM-001 (fixture) | origin: reverse-engineered, confidence: alta, generado 2026-07-15
+# Fixture sintético PII-safe. Seed fijo: 20260715. NO contiene datos reales.
+# Snowflakes = números ficticios de 17-19 dígitos; nombres = etiquetas de panel.
+# Escenario: configuracion de moderacion de un servidor: un Evento (politica) que combina un
+#   GrupoDeReglas (via EventoGrupo) que contiene una Regla de contenido (via GrupoRegla) y una de
+#   conducta por clave, con dos Acciones ordenadas (RN-05) y los ParametrosServidor del servidor.
+# Referencialmente consistente con el esquema EF (data-dictionary.md). Los `id` sinteticos ligan las
+# FK por Id; snowflakes ligan las FK logicas por texto. Modo simulacion por defecto (RN-09).
+seed: 20260715
+
+# Servidor duenio de la configuracion (FK logica por snowflake en las tablas de config).
+Servidor:
+  - id: 1
+    SnowflakeServidor: "985231470071122333"
+    TokenCifrado: "enc:aes-gcm:FICTICIO_TOKEN_CIFRADO_NO_REAL_01"
+    EstadoConexion: "conectado"
+    EstadoActivacion: "activo"
+    NombreDescriptivo: "Servidor Config Demo"
+    CreadoEn: "2026-06-05T11:00:00Z"
+    SnowflakeCanalSalida: "985231470071199888"
+    PropositoCanalSalida: "reporte-de-incidentes"
+
+Regla:                                          # regla de contenido (RC-09, R3: ExpresionRegular)
+  - id: 10
+    SnowflakeServidor: "985231470071122333"
+    Nombre: "Enlaces de invitacion externos"
+    TipoCriterio: "ExpresionRegular"
+    Criterio: "(?i)discord\\.gg/[A-Za-z0-9]+"
+    SensibleAMayusculas: false
+    NombrePolitica: "control-invitaciones"
+
+GrupoDeReglas:
+  - id: 20
+    SnowflakeServidor: "985231470071122333"
+    Nombre: "Invitaciones y rafaga"
+    ModoCoincidencia: "almenosn"                 # requiere MinimoCoincidencias (RN-15)
+    MinimoCoincidencias: 1
+
+GrupoRegla:                                      # M:M grupo-regla; una de contenido y una de conducta
+  - id: 30
+    GrupoDeReglasId: 20                          # FK (cascada) -> GrupoDeReglas.id
+    ClaseRegla: "contenido"
+    ReglaContenidoId: 10                         # FK logica -> Regla.id
+    ClaveReglaConducta: null
+  - id: 31
+    GrupoDeReglasId: 20
+    ClaseRegla: "conducta"
+    ReglaContenidoId: null
+    ClaveReglaConducta: "rafaga-distribuida"     # clave logica del catalogo (CU-01)
+
+Evento:                                          # politica; modo simulacion por defecto (RN-09)
+  - id: 40
+    SnowflakeServidor: "985231470071122333"
+    Nombre: "Politica invitaciones y rafaga"
+    Prioridad: 0                                 # menor valor = mayor prioridad (RN-04)
+    Continuar: false
+    Modo: "simulacion"
+    ModoCombinacionGrupos: "todos"
+
+EventoGrupo:                                     # M:M evento-grupo
+  - id: 50
+    EventoId: 40                                 # FK (cascada) -> Evento.id
+    GrupoDeReglasId: 20                          # FK logica -> GrupoDeReglas.id
+
+Accion:                                          # dos acciones ordenadas (RN-05)
+  - id: 60
+    EventoId: 40                                 # FK (cascada) -> Evento.id
+    Tipo: "ReportarACanalPrivado"
+    OrdenEjecucion: 0
+    VentanaBorradoDias: null
+    DuracionTimeoutMinutos: null
+    RolObjetivo: null
+  - id: 61
+    EventoId: 40
+    Tipo: "BaneoConBorradoRetroactivo"
+    OrdenEjecucion: 1
+    VentanaBorradoDias: 7                        # tope de plataforma (RC-11, RN-02)
+    DuracionTimeoutMinutos: null
+    RolObjetivo: null
+
+ParametrosServidor:                              # una fila por servidor (ux_parametros_servidor)
+  - id: 70
+    SnowflakeServidor: "985231470071122333"
+    UmbralCanalesDistintos: 3                    # rafaga distribuida (CU-01, RN-10)
+    VentanaDeteccionSegundos: 10.0
+    VentanaAntirreboteSegundos: 5.0              # antirrebote por usuario (CU-16, RN-06)
